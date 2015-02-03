@@ -1,34 +1,61 @@
 import argparse
+import sys
 
 from twisted.internet.protocol import DatagramProtocol, ClientFactory
 from twisted.words.protocols import irc
-from twisted.internet import reactor
+from twisted.internet import reactor, ssl
+from twisted.python import log
 
 
 class Echo(DatagramProtocol):
     def __init__(self, ircbot):
         self.irc = ircbot
 
-    def datagramReceived(self, datagram, (host, port)):
-        self.irc.msg(self.irc.factory.channel, datagram)
+    def datagramReceived(self, datagram, addr):
+        chans = self.irc.factory.channels
+        for chan in filter(lambda k: chans[k], chans):
+            self.irc.msg(chan, datagram)
 
 
 class IrcBot(irc.IRCClient):
-    factory = None
-    nickname = None
-    port = None
-
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
+        log.msg("connected")
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.bridge.stopListening()
+        log.err('connection lost: %s' % reason)
+        if hasattr(self, 'bridge'):
+            self.bridge.stopListening()
+
+    def identify(self):
+        log.msg('identifying as %s' % self.nickname)
+        self.msg('NickServ', 'identify %s %s' % (self.nickname, self.password))
 
     def signedOn(self):
         irc.IRCClient.signedOn(self)
-        self.join(self.factory.channel)
+        log.msg('signing in as %s' % self.nickname)
+
+        reactor.callLater(5, IrcBot.identify, self)
+
+        for chan in self.factory.channels:
+            self.join(chan)
+
+        log.msg('establishing bridge')
         self.bridge = reactor.listenUDP(self.factory.udp_port, Echo(self))
+
+    def irc_unknown(self, prefix, command, params):
+        log.msg('from network: %s %s %s' % (prefix, command, params))
+
+    def joined(self, channel):
+        irc.IRCClient.joined(self, channel)
+        log.msg('joining %s' % channel)
+        self.factory.channels[channel] = True
+
+    def left(self, channel):
+        irc.IRCClient.left(self, channel)
+        log.msg('leaving %s' % channel)
+        self.factory.channels[channel] = False
 
     def privmsg(self, user, channel, message):
         irc.IRCClient.privmsg(self, user, channel, message)
@@ -46,36 +73,59 @@ class IrcBot(irc.IRCClient):
             msg = "%s: I'm just a robot! Please ask a Vikidia sysadmin if you have any question." % user
             self.msg(channel, msg)
 
+    def irc_ERR_NICKNAMEINUSE(self, prefix, params):
+        wanted = self.factory.nickname
+        log.msg('contacting NickServ to REGAIN %s' % wanted)
+        self.msg('NickServ', 'REGAIN %s %s' % (wanted, self.password))
+
 
 class IrcBotFactory(ClientFactory):
-    def __init__(self, udp_port, channel, bot_nick='hermes'):
+    def __init__(self, udp_port, channels, nickname, password=None):
         self.udp_port = udp_port
-        self.channel = channel
-        self.nickname = bot_nick
+        self.channels = dict(zip(channels, map(lambda _: False, channels)))
+        self.nickname = nickname
+        self.password = password
 
     def buildProtocol(self, addr):
         bot = IrcBot()
         bot.factory = self
         bot.nickname = self.nickname
+        bot.password = self.password
         return bot
 
     def clientConnectionLost(self, connector, reason):
         """Automatic reconnection"""
+        log.err('IRC connection lost: %s' % reason)
+        log.msg('reconnecting ...')
         connector.connect()
 
     def clientConnectionFailed(self, connector, reason):
-        print("IRC connection failed: %s" % reason)
+        log.err('IRC connection failed: %s' % reason)
+        log.msg('aborting')
         reactor.stop()
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description="Make a bridge between a UDP port and an IRC channel.")
-    ap.add_argument('udpport', type=int)
-    ap.add_argument('channel', default='#vikidia-rc')
-    ap.add_argument('--server', default='chat.freenode.net')
-    ap.add_argument('--serverport', type=int, default=6667)
+    ap.add_argument('--udp', type=int, required=True, help="port where to read UDP packets")
+    ap.add_argument('--server', required=True, help='IRC host, as "HOST:PORT"')
+    ap.add_argument('--chan', action='append', required=True, help="IRC channels to visit (usable multiple times)")
+    ap.add_argument('--nick', required=True, help="nickname used by the bot on IRC")
+    ap.add_argument('--pwd', help="password associated to the nickname, if any")
+    ap.add_argument('--tls', action='store_true', help="use a secure connection")
     args = ap.parse_args()
 
-    f = IrcBotFactory(args.udpport, args.channel)
-    reactor.connectTCP(args.server, args.serverport, f)
+    irc_host, irc_port = args.server.split(':')
+    irc_port = int(irc_port)
+
+    f = IrcBotFactory(args.udp, args.chan, args.nick, args.pwd)
+
+    if args.tls:
+        cf = ssl.optionsForClientTLS(unicode(irc_host))
+        reactor.connectSSL(irc_host, irc_port, f, cf)
+    else:
+        reactor.connectTCP(irc_host, irc_port, f)
+
+    log.startLogging(sys.stdout)
+
     reactor.run()
