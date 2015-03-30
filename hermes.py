@@ -76,8 +76,8 @@ class IrcBot(irc.IRCClient):
 
     def irc_ERR_NICKNAMEINUSE(self, prefix, params):
         wanted = self.factory.nickname
-        log.msg('contacting NickServ to REGAIN %s' % wanted)
-        self.msg('NickServ', 'REGAIN %s %s' % (wanted, self.password))
+        log.msg('GHOSTing %s -> %s' % (self.nickname, wanted))
+        self.msg('NickServ', 'GHOST %s %s' % (wanted, self.password))
 
 
 class IrcBotFactory(ClientFactory):
