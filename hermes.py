@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os, os.path
 
 from twisted.internet.protocol import DatagramProtocol, ClientFactory
 from twisted.words.protocols import irc
@@ -128,4 +129,13 @@ if __name__ == '__main__':
 
     log.startLogging(sys.stdout)
 
-    reactor.run()
+    lockfile = '/tmp/udp2irc_lockfile'
+    if os.path.exists(lockfile):
+        log.err("Won't run until %s exists!" % lockfile)
+    else:
+        with open(lockfile, mode='w') as f:
+            f.write(str(os.getpid()))
+        try:
+            reactor.run()
+        finally:
+            os.remove(lockfile)
