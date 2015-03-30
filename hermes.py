@@ -30,8 +30,8 @@ class IrcBot(irc.IRCClient):
             self.bridge.stopListening()
 
     def identify(self):
-        log.msg('identifying as %s' % self.nickname)
-        self.msg('NickServ', 'identify %s %s' % (self.nickname, self.password))
+        log.msg('identifying as %s' % self.factory.nickname)
+        self.msg('NickServ', 'IDENTIFY %s %s' % (self.factory.nickname, self.password))
 
     def signedOn(self):
         irc.IRCClient.signedOn(self)
