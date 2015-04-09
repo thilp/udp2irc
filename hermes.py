@@ -16,7 +16,7 @@ class Echo(DatagramProtocol):
 
     def datagramReceived(self, datagram, addr):
         for chan in self.chans:
-            if self.irc.joined[chan]:
+            if self.irc.joined_chans[chan]:
                 self.irc.msg(chan, datagram)
             else:
                 log.err('trying to write from %s on non-joined chan %s' % (addr, chan))
@@ -25,7 +25,7 @@ class Echo(DatagramProtocol):
 class IrcBot(irc.IRCClient):
     def __init__(self):
         self.bridges = {}
-        self.joined = {}
+        self.joined_chans = {}
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
@@ -62,12 +62,12 @@ class IrcBot(irc.IRCClient):
     def joined(self, channel):
         irc.IRCClient.joined(self, channel)
         log.msg('joining %s' % channel)
-        self.joined[channel] = True
+        self.joined_chans[channel] = True
 
     def left(self, channel):
         irc.IRCClient.left(self, channel)
         log.msg('leaving %s' % channel)
-        self.joined[channel] = False
+        self.joined_chans[channel] = False
 
     def privmsg(self, user, channel, message):
         irc.IRCClient.privmsg(self, user, channel, message)
@@ -93,7 +93,7 @@ class IrcBot(irc.IRCClient):
 
 class IrcBotFactory(ReconnectingClientFactory):
     def __init__(self, ports2chans, nickname, password=None):
-        self.ports2chans = port2chans
+        self.ports2chans = ports2chans
         self.nickname = nickname
         self.password = password
 
@@ -146,7 +146,7 @@ def main():
         if port and not chans:
             raise RuntimeError('no IRC chans corresponding to UDP port %s' % port)
 
-    f = IrcBotFactory(port2chans, args.nickname, args.pwd)
+    f = IrcBotFactory(port2chans, args.nick, args.pwd)
 
     if args.tls:
         cf = ssl.optionsForClientTLS(unicode(irc_host))
