@@ -64,7 +64,7 @@ The above encodings are performed using the tools provided by Python's standard 
 As such, trying to decode data encoded with them may prove difficult:
 
 ```
-$ cat data-encoded-with-z64 | base64 -d | zcat
+$ base64 -d data-encoded-with-z64 | zcat
 gzip: stdin: not in gzip format
 ```
 
