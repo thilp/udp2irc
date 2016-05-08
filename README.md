@@ -26,7 +26,9 @@ optional arguments:
 
 ### Bridges
 
-A “bridge” is the way you tell hermes what to transmit, where, and how. Bridges have 3 components:
+A “bridge” is the way you tell hermes what to transmit, where, and how.
+**Multiple bridges** may be specified.
+Bridges have 3 components:
 
 1. **A source UDP port:** The port on which hermes will listen for new data from MediaWiki.
    Example: `9999`
