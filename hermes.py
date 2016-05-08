@@ -71,7 +71,7 @@ class IrcBot(irc.IRCClient):
 
         log.msg('establishing bridges')
         chan_set = set()  # we want to join each chan only once
-        for udp_port, consumers in self.factory.port2consumers:
+        for udp_port, consumers in self.factory.port2consumers.iteritems():
             for consumer in consumers:
                 chan_set.add(consumer.dest_chan)
             self.bridges[udp_port] = reactor.listenUDP(udp_port, Echo(self, consumers))
@@ -161,7 +161,7 @@ def main():
     }
 
     if args.list_encodings:
-        for enc_name, enc in encodings:
+        for enc_name, enc in encodings.iteritems():
             print("{}: {}".format(enc_name, enc.desc))
         return
 
