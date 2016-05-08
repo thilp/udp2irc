@@ -50,13 +50,13 @@ that can be given to hermes' `--bridge` option. For example: `--bridge "9999 #vi
   This makes it easier (especially for bots) to process messages when these are broken into chunks, as is often the case
   on IRC.
   Formula: `b64(X) = "[" + length(base64(X)) + "]" + base64(X)`
-* **z64:** Identical to _b64_, except that the payload is [gzip](https://en.wikipedia.org/wiki/Gzip)-compressed
+* **z64:** Identical to _b64_, except that the payload is [compressed](https://en.wikipedia.org/wiki/DEFLATE)
   before base64-encoding. This allows smaller message sizes (and thus less chunks) on IRC.
-  Formula: `z64(X) = "[" + length(base64(gzip(X))) + "]" + base64(gzip(X))`
+  Formula: `z64(X) = "[" + length(base64(deflate(X))) + "]" + base64(deflate(X))`
 
-More efficient encodings than base64 (e.g. base85) and compression algorithms than gzip (e.g. snappy) could have been used,
+More efficient encodings than base64 (e.g. base85) and compression algorithms than DEFLATE (e.g. snappy) could have been used,
 but they would probably be far less common. It is likely that, whatever language you write your bot in,
-it has libraries for base64 and gzip.
+it has libraries for base64 and DEFLATE (often under the name “gzip”).
 
 #### Decoding z64
 
@@ -69,12 +69,11 @@ gzip: stdin: not in gzip format
 ```
 
 This particular gzip-related problem above is due to Python's
-[zlib](https://docs.python.org/2/library/zlib.html#zlib.compress) not adding a necessary gzip header
-to the data.
+[`zlib.compress`](https://docs.python.org/2/library/zlib.html#zlib.compress) not adding an expected gzip header
+to the data (gzip being a file format _around_ the DEFLATE compression).
 
 To decode _z64_-encoded data in other languages than Python, please have a look at
 [this StackOverflow question](https://stackoverflow.com/questions/3178566/deflate-command-line-tool).
-
 If you are using Python, then [`zlib.decompress`](https://docs.python.org/2/library/zlib.html#zlib.decompress) will do.
 
 Don't forget to base64-decode first!
