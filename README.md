@@ -58,6 +58,27 @@ More efficient encodings than base64 (e.g. base85) and compression algorithms th
 but they would probably be far less common. It is likely that, whatever language you write your bot in,
 it has libraries for base64 and gzip.
 
+#### Decoding z64
+
+The above encodings are performed using the tools provided by Python's standard library.
+As such, trying to decode data encoded with them may prove difficult:
+
+```
+$ cat data-encoded-with-z64 | base64 -d | zcat
+gzip: stdin: not in gzip format
+```
+
+This particular gzip-related problem above is due to Python's
+[zlib](https://docs.python.org/2/library/zlib.html#zlib.compress) not adding a necessary gzip header
+to the data.
+
+To decode _z64_-encoded data in other languages than Python, please have a look at
+[this StackOverflow question](https://stackoverflow.com/questions/3178566/deflate-command-line-tool).
+
+If you are using Python, then [`zlib.decompress`](https://docs.python.org/2/library/zlib.html#zlib.decompress) will do.
+
+Don't forget to base64-decode first!
+
 ### Example service file
 
 You can use a variation of this file to manage your hermes daemon with [systemd](https://en.wikipedia.org/wiki/Systemd):
