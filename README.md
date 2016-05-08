@@ -84,4 +84,4 @@ WantedBy=multi-user.target
 ## How it works
 
 MediaWiki advertises each new change [via UDP](https://www.mediawiki.org/wiki/Manual:$wgRCFeeds).
-`hermes.py` script simply listen to what MediaWiki says and repeats it (possibly transformed) on IRC.
+The `hermes.py` script simply listens to what MediaWiki says and repeats it (possibly transformed) on IRC.
