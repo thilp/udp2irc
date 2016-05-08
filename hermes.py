@@ -1,25 +1,47 @@
 import argparse
 import sys
+from collections import namedtuple
+
+import collections
 import os
 import os.path
+import base64
 
 from twisted.internet.protocol import DatagramProtocol, ReconnectingClientFactory
 from twisted.words.protocols import irc
 from twisted.internet import reactor, ssl
 from twisted.python import log
 
+DataConsumer = collections.namedtuple('DataConsumer', ['dest_chan', 'encoder'])
+
+
+class Encoding(object):
+    def encode(self, stuff):
+        pass
+
+
+class RawEncoding(Encoding):
+    def encode(self, stuff):
+        return stuff
+
+
+class Base64Encoding(Encoding):
+    def encode(self, stuff):
+        b64_msg = base64.b64encode(stuff)
+        return "[{}]{}".format(len(b64_msg), b64_msg)
+
 
 class Echo(DatagramProtocol):
-    def __init__(self, ircbot, chans):
+    def __init__(self, ircbot, consumers):
         self.irc = ircbot
-        self.chans = chans
+        self.consumers = consumers
 
     def datagramReceived(self, datagram, addr):
-        for chan in self.chans:
-            if self.irc.joined_chans[chan]:
-                self.irc.msg(chan, datagram)
+        for consumer in self.consumers:
+            if self.irc.joined_chans[consumer.dest_chan]:
+                self.irc.msg(consumer.dest_chan, consumer.encoder.encode(datagram))
             else:
-                log.err('trying to write from %s on non-joined chan %s' % (addr, chan))
+                log.err('trying to write from %s on non-joined chan %s' % (addr, consumer))
 
 
 class IrcBot(irc.IRCClient):
@@ -49,9 +71,10 @@ class IrcBot(irc.IRCClient):
 
         log.msg('establishing bridges')
         chan_set = set()  # we want to join each chan only once
-        for port, chans in self.factory.ports2chans:
-            chan_set.add(*chans)
-            self.bridges[port] = reactor.listenUDP(port, Echo(self, chans))
+        for udp_port, consumers in self.factory.port2consumers:
+            for consumer in consumers:
+                chan_set.add(consumer.dest_chan)
+            self.bridges[udp_port] = reactor.listenUDP(udp_port, Echo(self, consumers))
 
         for chan in chan_set:
             self.join(chan)
@@ -92,8 +115,8 @@ class IrcBot(irc.IRCClient):
 
 
 class IrcBotFactory(ReconnectingClientFactory):
-    def __init__(self, ports2chans, nickname, password=None):
-        self.ports2chans = ports2chans
+    def __init__(self, port2consumers, nickname, password=None):
+        self.port2consumers = port2consumers
         self.nickname = nickname
         self.password = password
 
@@ -109,7 +132,6 @@ class IrcBotFactory(ReconnectingClientFactory):
         log.err('IRC connection lost: %s' % reason)
         self.retry(connector)
 
-
     def clientConnectionFailed(self, connector, reason):
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
         log.err('IRC connection failed: %s' % reason)
@@ -120,33 +142,46 @@ class IrcBotFactory(ReconnectingClientFactory):
 def none(*args):
     return not any(args)
 
+EchoEncoding = collections.namedtuple('EchoEncoding', ['type', 'desc'])
+
 
 def main():
     ap = argparse.ArgumentParser(description="Make a bridge between a UDP port and an IRC channel.")
-    ap.add_argument('--human-udp', type=int, help="port where to read UDP packets for human-readable data")
-    ap.add_argument('--json-udp', type=int, help="port where to read UDP packets for JSON data")
+    ap.add_argument('--list-encodings', action='store_true', help="List available encodings for --bridge")
+    ap.add_argument('--bridge', action='append', help='bridge specification, as "UDPPORT CHAN ENCODING"')
     ap.add_argument('--server', required=True, help='IRC host, as "HOST:PORT"')
-    ap.add_argument('--human-chan', action='append', help="IRC channels for human-readable output (use multiple times)")
-    ap.add_argument('--json-chan', action='append', help="IRC channels for JSON output (use multiple times)")
     ap.add_argument('--nick', required=True, help="nickname used by the bot on IRC")
     ap.add_argument('--pwd', help="password associated to the nickname, if any")
     ap.add_argument('--tls', action='store_true', help="use a secure IRC connection")
     args = ap.parse_args()
 
+    encodings = {
+        'raw': EchoEncoding(type=RawEncoding, desc="No transformation"),
+        'b64': EchoEncoding(type=Base64Encoding, desc='M -> "[" + len(base64(M)) + "]" + base64(M)')
+    }
+
+    if args.list_encodings:
+        for enc_name, enc in encodings:
+            print("{}: {}".format(enc_name, enc.desc))
+        return
+
     irc_host, irc_port = args.server.split(':')
     irc_port = int(irc_port)
 
-    if none(args.human_udp, args.json_udp):
-        raise RuntimeError('no UDP port provided')
+    port2consumers = {}
+    for bridge in args.bridge:
+        udp_port, chan_name, enc_name = bridge.split(' ')
+        udp_port = int(udp_port)
+        if enc_name not in encodings:
+            raise RuntimeError("no encoding corresponding to {} (see --list-encodings)".format(enc_name))
+        enc = encodings[enc_name]
+        consumer = DataConsumer(dest_chan=chan_name, encoder=enc.type())
+        if udp_port not in port2consumers:
+            port2consumers[udp_port] = [consumer]
+        else:
+            port2consumers[udp_port].append(consumer)
 
-    port2chans = zip([args.human_udp, args.json_udp], [args.human_chan, args.json_chan])
-    for port, chans in port2chans:
-        if port is None and chans:
-            raise RuntimeError('no UDP port corresponding to IRC chans %s' % ', '.join(chans))
-        if port and not chans:
-            raise RuntimeError('no IRC chans corresponding to UDP port %s' % port)
-
-    f = IrcBotFactory(port2chans, args.nick, args.pwd)
+    f = IrcBotFactory(port2consumers, args.nick, args.pwd)
 
     if args.tls:
         cf = ssl.optionsForClientTLS(unicode(irc_host))
