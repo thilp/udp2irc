@@ -29,7 +29,7 @@ class RawEncoding(Encoding):
 class Base64Encoding(Encoding):
     def encode(self, stuff):
         b64_msg = base64.b64encode(stuff)
-        return "[{}]{}".format(len(b64_msg), b64_msg)
+        return "[{}:{}]".format(len(b64_msg), b64_msg)
 
 
 class GzipBase64Encoding(Base64Encoding):
@@ -163,7 +163,7 @@ def main():
 
     encodings = {
         'raw': EchoEncoding(type=RawEncoding, desc="No transformation"),
-        'b64': EchoEncoding(type=Base64Encoding, desc='M -> "[" + len(base64(M)) + "]" + base64(M)'),
+        'b64': EchoEncoding(type=Base64Encoding, desc='M -> "[" + len(base64(M)) + ":" + base64(M) + "]"'),
         'z64': EchoEncoding(type=GzipBase64Encoding, desc='like b64, but with a gzip-compressed payload'),
     }
 

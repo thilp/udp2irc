@@ -46,13 +46,14 @@ that can be given to hermes' `--bridge` option. For example: `--bridge "9999 #vi
 * **raw:** The identity function: no transformation, what is read from MediaWiki is directly written
   to the appropriate IRC channels.
   Formula: `raw(X) = X`
-* **b64:** The input is converted to [base64](https://en.wikipedia.org/wiki/Base64) and prefixed with its own length.
+* **b64:** The input is converted to [base64](https://en.wikipedia.org/wiki/Base64), prefixed with its own length,
+  and delimited by square brackets.
   This makes it easier (especially for bots) to process messages when these are broken into chunks, as is often the case
   on IRC.
-  Formula: `b64(X) = "[" + length(base64(X)) + "]" + base64(X)`
+  Formula: `b64(X) = "[" + length(base64(X)) + ":" + base64(X) + "]"`
 * **z64:** Identical to _b64_, except that the payload is [compressed](https://en.wikipedia.org/wiki/DEFLATE)
   before base64-encoding. This allows smaller message sizes (and thus less chunks) on IRC.
-  Formula: `z64(X) = "[" + length(base64(deflate(X))) + "]" + base64(deflate(X))`
+  Formula: `z64(X) = "[" + length(base64(deflate(X))) + ":" + base64(deflate(X)) + "]"`
 
 More efficient encodings than base64 (e.g. base85) and compression algorithms than DEFLATE (e.g. snappy) could have been used,
 but they would probably be far less common. It is likely that, whatever language you write your bot in,
